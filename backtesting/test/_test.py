@@ -1098,6 +1098,38 @@ class TestLib(TestCase):
             assets["s2"]["Open"].iloc[0] * unit,
         )
 
+    def test_FractionalBacktest_multi_asset_margin_controls_position_size(self):
+        n = 60
+        assets = {"s1": GOOG.iloc[:n].copy(), "s2": GOOG.iloc[:n].copy()}
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                i = len(self.data.index)
+                if i == 10:
+                    self.buy(symbol="s1")
+                elif i == 20 and self.position["s1"]:
+                    self.position["s1"].close()
+
+        def trade_size_for_margin(margin):
+            bt = FractionalBacktest(
+                assets,
+                S,
+                fractional_unit=1 / 1e6,
+                cash=10_000,
+                margin=margin,
+                finalize_trades=True,
+            )
+            stats = bt.run()
+            trade = stats["_trades"].loc[lambda df: df["Symbol"] == "s1"].iloc[0]
+            return abs(float(trade["Size"]))
+
+        size_no_leverage = trade_size_for_margin(1.0)
+        size_5x_leverage = trade_size_for_margin(0.2)
+        self.assertGreater(size_5x_leverage, size_no_leverage * 4.5)
+
     def test_MultiBacktest(self):
         import backtesting
 
