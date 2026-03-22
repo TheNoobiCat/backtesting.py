@@ -1128,7 +1128,10 @@ class TestLib(TestCase):
 
         size_no_leverage = trade_size_for_margin(1.0)
         size_5x_leverage = trade_size_for_margin(0.2)
-        self.assertGreater(size_5x_leverage, size_no_leverage * 4.5)
+        # margin=0.2 implies up to 5x leverage; use slightly lower threshold
+        # to account for integer sizing and fill-price effects.
+        expected_min_multiplier = 4.5
+        self.assertGreater(size_5x_leverage, size_no_leverage * expected_min_multiplier)
 
     def test_MultiBacktest(self):
         import backtesting
