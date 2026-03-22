@@ -1075,6 +1075,29 @@ class TestLib(TestCase):
         self.assertAlmostEqual(trade["EntryPrice"], 236.69)
         self.assertAlmostEqual(stats["_strategy"]._indicators[0][trade["EntryBar"]], 234.14)
 
+    def test_FractionalBacktest_fractionalizes_multi_asset_data_on_init(self):
+        n = 50
+        assets = {"s1": GOOG.iloc[:n].copy(), "s2": GOOG.iloc[:n].copy()}
+        unit = 1 / 1e6
+        bt = FractionalBacktest(
+            assets,
+            SmaCross,
+            fractional_unit=unit,
+            cash=100,
+            margin=0.2,
+            commission=0.00015,
+            exclusive_orders=True,
+            finalize_trades=True,
+        )
+        self.assertAlmostEqual(
+            bt._asset_data["s1"]["Close"].iloc[0],
+            assets["s1"]["Close"].iloc[0] * unit,
+        )
+        self.assertAlmostEqual(
+            bt._asset_data["s2"]["Open"].iloc[0],
+            assets["s2"]["Open"].iloc[0] * unit,
+        )
+
     def test_MultiBacktest(self):
         import backtesting
 

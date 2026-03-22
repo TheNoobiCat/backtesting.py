@@ -596,7 +596,7 @@ class FractionalBacktest(Backtest):
             self.__data = data
         with warnings.catch_warnings(record=True):
             warnings.filterwarnings(action="ignore", message="frac")
-            super().__init__(data, *args, **kwargs)
+            super().__init__(self.__data, *args, **kwargs)
 
     def run(self, **kwargs) -> pd.Series:
         if isinstance(self.__data, dict):
