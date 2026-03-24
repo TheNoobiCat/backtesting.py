@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import unittest
+import warnings
 from concurrent.futures.process import ProcessPoolExecutor
 from contextlib import contextmanager
 from glob import glob
@@ -538,6 +539,33 @@ class TestBacktest(TestCase):
                     self.position.close()
 
         Backtest({"GOOG": goog, "HALF": half}, S, cash=1_000_000).run()
+
+    def test_multi_asset_hedged_margin_does_not_cancel_second_leg(self):
+        idx = pd.date_range("2020-01-01", periods=20, freq="D")
+        one = pd.DataFrame({"Open": 100, "High": 100, "Low": 100, "Close": 100}, index=idx)
+        two = one.copy()
+
+        class S(_S):
+            def next(self):
+                i = len(self.data.index)
+                if i == 3:
+                    self.buy(symbol="ONE", size=1)
+                    self.sell(symbol="TWO", size=1)
+                if i == 5:
+                    self.position["ONE"].close()
+                    self.position["TWO"].close()
+
+        bt = Backtest({"ONE": one, "TWO": two}, S, cash=100, margin=1)
+        with warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter("always")
+            stats = bt.run()
+
+        self.assertFalse(
+            any("insufficient margin" in str(w.message) for w in captured),
+            [str(w.message) for w in captured],
+        )
+        self.assertEqual(len(stats._trades), 2)
+        self.assertEqual(set(stats._trades["Symbol"]), {"ONE", "TWO"})
 
     def test_multi_asset_misaligned_index_raises(self):
         n = 40

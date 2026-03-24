@@ -980,8 +980,35 @@ class _Broker:
     @property
     def margin_available(self) -> float:
         # From https://github.com/QuantConnect/Lean/pull/3768
-        margin_used = sum(trade.value / self._leverage for trade in self.trades)
+        margin_used = self._margin_used()
         return max(0, self.equity - margin_used)
+
+    def _margin_used(
+        self,
+        *,
+        additional_size: int = 0,
+        additional_symbol: Optional[str] = None,
+    ) -> float:
+        long_value = 0.0
+        short_value = 0.0
+        for trade in self.trades:
+            if trade.is_long:
+                long_value += trade.value
+            else:
+                short_value += trade.value
+
+        if additional_size:
+            if additional_symbol is None:
+                additional_symbol = self.primary_symbol
+            additional_value = abs(additional_size) * self.last_price(additional_symbol)
+            if additional_size > 0:
+                long_value += additional_value
+            else:
+                short_value += additional_value
+
+        if isinstance(self._data, _MultiData):
+            return max(long_value, short_value) / self._leverage
+        return (long_value + short_value) / self._leverage
 
     def next(self):
         i = self._i = len(self._symbol_data()) - 1
@@ -1141,10 +1168,14 @@ class _Broker:
                         break
 
             # If we don't have enough liquidity to cover for the order, the broker CANCELS it
-            if (
-                abs(need_size) * adjusted_price_plus_commission
-                > self.margin_available * self._leverage
-            ):
+            open_commission = self._commission(need_size, adjusted_price)
+            mark_to_market_pl = need_size * (self.last_price(order.symbol) - adjusted_price)
+            equity_after_open = self.equity + mark_to_market_pl - open_commission
+            margin_after_open = self._margin_used(
+                additional_size=need_size,
+                additional_symbol=order.symbol,
+            )
+            if equity_after_open < margin_after_open:
                 warnings.warn(
                     f"time={self._i}: Broker canceled the order due to insufficient margin "
                     f"(equity={self.equity:.2f}, margin_available={self.margin_available:.2f}).",
